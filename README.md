@@ -1,18 +1,88 @@
-# 黑马点评项目备份
+# 宠伴洗护 · 单店宠物服务平台
 
-Java 8 / Spring Boot 2.3.12 / Maven 项目，应用目录为 `dianping-master/`。
+基于原黑马点评 Java / Spring Boot 工程完成第一阶段改造。提供手机优先的顾客网页、电脑优先的店主工作台，支持到店洗澡、美容和基础护理。
 
-## 本地运行
+**选规格 → 先选时间 → 填宠物信息 → 下单占位 → 模拟支付 → 店主确认 → 到店核验 → 服务完成 → 评价。**
 
-1. 准备 MySQL、Redis 和 RabbitMQ。
-2. 将 `dianping-master/src/main/resources/application.example.yaml` 复制为同目录的 `application.yaml`，按本机环境设置连接信息。配置示例使用环境变量 `MYSQL_PASSWORD` 和 `RABBITMQ_PASSWORD`。
-3. 按实际数据库名称导入 `dianping-master/src/main/resources/db/hmdp.schema.sql`，并自行准备测试数据；该文件只包含表结构。
-4. 在 `dianping-master/` 目录运行 `mvn spring-boot:run`，默认端口为 8081。
+## 快速启动
 
-## 备份说明
+需要 JDK、Maven；集成测试使用 JDK 21，可运行 JAR 也已在本机 JDK 25 启动验证。前端是原生 HTML/CSS/JavaScript，由 Spring Boot 同源提供，不需要安装前端依赖。
 
-- GitHub 的 `main` 分支和 `backup-github-2026-10-10` 备份分支保存首次上传的源码版本。
-- 原电脑 `D:\dianping-master` 中的 `local-backup` 分支及 `backup-original-2026-10-10` 标签保存上传前的原始源码、配置与数据。
-- 原始配置、手机号 CSV、登录 token 和含用户数据的数据库导出仅在本地保存；编译产物和 IDE 缓存不纳入 Git。
-- `local-backup` 分支包含本地配置和数据，请仅推送 `main` 及明确指定的公开标签。
-- `generate_tokens.py` 是本地辅助脚本，其中的端口和文件路径需按运行环境调整。
+在项目外层目录运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-pet.ps1
+```
+
+如需指定 Java 安装目录：
+
+```powershell
+.\start-pet.ps1 -JavaHome '你的 JDK 目录'
+```
+
+启动后访问：
+
+- 顾客网页：http://127.0.0.1:8081/
+- 店主工作台：http://127.0.0.1:8081/owner.html
+- 店主演示账号：`petadmin`，默认演示密码：`PetDemo2026!`
+- 顾客：填写手机号，获取本机模拟验证码后登录；查看示例订单使用 `13800000001`。
+
+默认使用文件型 H2，数据保存在 `dianping-master/.pet-data/`，重启不会丢失，不依赖 Redis/RabbitMQ。首次启动自动创建宠物表和演示数据；原点评源码、配置、`tb_*` 表和数据保留。
+
+## 第一阶段规则
+
+预约按一小时显示，服务时长为整小时；系统按能力与排班自动安排美容师。未来七天内至少提前两小时预约。未支付订单占位十分钟，支付后店主三十分钟内确认，否则取消并全额模拟退款。到店出示预约码，完成订单后可评价。
+
+详细业务约定、并发策略、接口和演示步骤见 [第一阶段说明](docs/petcare-stage1.md)。促销、社区和 AI 属于后续阶段。
+
+## 验证与打包
+
+```powershell
+.\verify-pet.ps1
+```
+
+验证宠物模块的数据库集成测试与网页脚本语法，并生成可运行 JAR：
+
+```powershell
+cd dianping-master
+java -jar target/hm-dianping-0.0.1-SNAPSHOT.jar
+```
+
+原项目的其他测试依赖原 MySQL、Redis 等环境，因此宠物验证脚本明确选择宠物集成测试。
+
+网页验收需先启动应用，再运行：
+
+```powershell
+cd qa
+npm ci
+npm test
+```
+
+默认使用本机 Chrome，可通过 `PET_CHROME_PATH` 指定浏览器路径。验收覆盖手机布局、先选时间再填写信息、登录保留表单、支付接单和取消退款。结果及截图保存在 `.local-backups/browser-results/`，不纳入 Git。
+
+打包后的宠物 JAR 排除原始 `application.yaml` 和含用户数据的 `hmdp.sql`；这些本地文件仍保留在源码目录。
+
+## MySQL 模式
+
+先创建一个数据库（默认名 `petcare`），然后设置环境变量：
+
+```powershell
+$env:PET_DB_URL = 'jdbc:mysql://127.0.0.1:3306/petcare?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8'
+$env:PET_DB_USERNAME = 'root'
+$env:PET_DB_PASSWORD = '你的数据库密码'
+$env:PET_ADMIN_PASSWORD = '你设置的店主密码，至少八位'
+.\start-pet.ps1 -MySql
+```
+
+新业务只初始化 `pet_*` 表，不删除或修改原点评表。数据库密码和店主自定义密码通过环境变量提供，不写入仓库。默认绑定本机地址；模拟支付与验证码用于本阶段演示。
+
+## 原始备份
+
+- 本机 `local-backup` 分支和 `backup-original-2026-10-10` 标签保存改造前的原始代码、配置与数据。
+- GitHub 的 `backup-github-2026-10-10` 分支保存首次上传版本。
+- `.local-backups/backup-2026-10-10.bundle` 是原始 Git 备份文件。
+- 本地密码、手机号 CSV、token、原始数据库导出、演示运行数据和编译产物不纳入公开版本。
+
+第一阶段完成版本另外保存在本机 `petcare-stage1-2026-10-10` 标签、GitHub 的 `backup-petcare-stage1-2026-10-10` 分支，以及 `.local-backups/petcare-stage1-2026-10-10.bundle` 文件中。改造前的备份继续保留。
+
+原点评入口仍为 `com.hmdp.HmDianPingApplication`，可在 IDE 中运行；需要原有 MySQL、Redis、RabbitMQ 和本地配置。默认 Maven/JAR 入口改为 `com.petcare.PetApplication`。
