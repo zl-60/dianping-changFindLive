@@ -1,4 +1,4 @@
-param(
+﻿param(
     [int]$Port = 8081,
     [switch]$MySql,
     [string]$JavaHome

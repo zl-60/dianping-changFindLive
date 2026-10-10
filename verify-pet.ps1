@@ -1,6 +1,11 @@
-param([string]$JavaHome)
+﻿param([string]$JavaHome)
 $ErrorActionPreference = 'Stop'
 if ($JavaHome) { $env:JAVA_HOME = $JavaHome }
+$petWindowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+if ($petWindowsPowerShell) {
+    & $petWindowsPowerShell.Source -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'qa/check-powershell.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'PowerShell 脚本兼容性验证失败。' }
+}
 Push-Location (Join-Path $PSScriptRoot 'dianping-master')
 try {
     & mvn.cmd -s (Join-Path $PSScriptRoot 'maven-settings.xml') '-Dtest=com.petcare.PetBookingIntegrationTest' package

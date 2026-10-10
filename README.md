@@ -41,7 +41,9 @@ powershell -ExecutionPolicy Bypass -File .\start-pet.ps1
 .\verify-pet.ps1
 ```
 
-验证宠物模块的数据库集成测试与网页脚本语法，并生成可运行 JAR：
+在 Windows 上先用 Windows PowerShell 5.1 检查启动与验证脚本，再验证宠物模块的数据库集成测试和网页脚本语法，并生成可运行 JAR。两个含中文的 PowerShell 脚本使用带 BOM 的 UTF-8 编码，以兼容 Windows PowerShell 5.1。
+
+打包后可运行：
 
 ```powershell
 cd dianping-master
