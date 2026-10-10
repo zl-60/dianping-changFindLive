@@ -1,0 +1,20 @@
+# Build output and IDE metadata
+**/target/
+.idea/
+*.iml
+*.log
+__pycache__/
+*.pyc
+
+# Local configuration, authentication data and database exports
+**/application.yaml
+**/application.yml
+.env
+.env.*
+!.env.example
+**/tokens.txt
+/tb_user.csv
+/dianping-master/src/main/resources/db/hmdp.sql
+
+# Local backup artifacts
+/.local-backups/
