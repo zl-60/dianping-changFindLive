@@ -1,7 +1,7 @@
 'use strict';
 window.PetLife=(()=>{
   const {api,escape:e,money,dt,modal,close,toast,submit,input,formData}=Pet;
-  let enabled=false,context,feedCursor,page=1;
+  let enabled=false,context,feedCursor,page=1,couponView=0;
   const ready=api('/capabilities').then(value=>{enabled=value.platform;document.querySelectorAll('[data-platform]').forEach(el=>el.hidden=!enabled);return enabled;});
   const logged=()=>Boolean(sessionStorage.getItem('pet-customer-token'));
   const need=task=>logged()?task():context.login(task);
@@ -47,31 +47,88 @@ window.PetLife=(()=>{
     await search();
   }
   async function coupons(){
+    const view=++couponView;
     const [list,mine]=await Promise.all([api('/coupons'),logged()?api('/my-coupons'):Promise.resolve([])]);
-    context.app.innerHTML=shell('给毛孩子的限量好券','先领一份小心意，预约洗护时可按条件抵扣。',`<section class="life-grid">${list.map(c=>`<article class="panel coupon-card"><div class="eyebrow">${e(c.placeName)}</div><h2>${e(c.title)}</h2><div class="coupon-value">¥${money(c.discountCents)} <small>满 ¥${money(c.minSpendCents)} 可用</small></div><p class="muted">活动：${e(dt(c.startsAt))} — ${e(dt(c.endsAt))}<br>使用有效期至 ${e(dt(c.validUntil))}<br>剩余 ${e(c.stock)} 张 · 每人限领一张</p><button class="btn full" data-claim="${e(c.id)}">立即抢券</button></article>`).join('')||'<div class="empty">暂时没有抢券活动。</div>'}</section><section class="panel"><div class="table-toolbar"><h2>我的优惠券</h2><button class="btn small outline" id="refresh-coupons">刷新</button></div><div id="claim-status" role="status"></div>${!logged()?'<button class="btn outline" id="coupon-login">登录后查看</button>':mine.length?mine.map(c=>`<div class="wallet-row"><div><strong>${e(c.title)}</strong><p class="muted">满 ¥${money(c.minSpendCents)} 减 ¥${money(c.discountCents)} · ${c.status==='USED'?'已用于预约':c.status==='FAILED'?'领取失败':new Date(c.validUntil+'+08:00')<new Date()?'已过期':'待使用'}</p></div>${c.status==='SUCCESS'?'<a class="btn small outline" href="#services">去预约</a>':''}</div>`).join(''):'<p class="muted">还没有优惠券，挑一张喜欢的领取吧。</p>'}</section>`);
+    if(!currentCouponView(view))return;
+    context.app.innerHTML=shell('给毛孩子的限量好券','先领一份小心意，预约洗护时可按条件抵扣。',`<div id="claim-status" role="status" aria-atomic="true" hidden></div><section class="life-grid">${list.map(c=>`<article class="panel coupon-card"><div class="eyebrow">${e(c.placeName)}</div><h2>${e(c.title)}</h2><div class="coupon-value">¥${money(c.discountCents)} <small>满 ¥${money(c.minSpendCents)} 可用</small></div><p class="muted">活动：${e(dt(c.startsAt))} — ${e(dt(c.endsAt))}<br>使用有效期至 ${e(dt(c.validUntil))}<br>剩余 ${e(c.stock)} 张 · 每人限领一张</p><button class="btn full" data-claim="${e(c.id)}">立即抢券</button><p class="coupon-feedback" data-claim-feedback="${e(c.id)}" role="status" aria-atomic="true" hidden></p></article>`).join('')||'<div class="empty">暂时没有抢券活动。</div>'}</section><section class="panel"><div class="table-toolbar"><h2>我的优惠券</h2><button class="btn small outline" id="refresh-coupons">刷新</button></div><div id="coupon-wallet">${wallet(mine)}</div></section>`);
     document.getElementById('refresh-coupons').onclick=()=>context.render();
     const login=document.getElementById('coupon-login');if(login)login.onclick=()=>context.login(context.render);
-    document.querySelectorAll('[data-claim]').forEach(button=>button.onclick=()=>need(()=>submit(button,async()=>{
-      const result=await api(`/coupons/${button.dataset.claim}/claim`,{method:'POST',body:{}});
-      const storageKey='pet-pending-coupon:'+sessionStorage.getItem('pet-customer-phone');
-      localStorage.setItem(storageKey,result.orderId);
-      await poll(result.orderId,storageKey,0);
-    })));
+    const buttons=[...document.querySelectorAll('[data-claim]')];
+    let busy=false;
+    async function claim(button,saved){
+      if(busy||!currentCouponView(view))return;
+      busy=true;
+      const key='pet-pending-coupon:'+sessionStorage.getItem('pet-customer-phone');
+      let pending=saved||pendingCoupon(key),couponId=pending?.couponId||button?.dataset.claim;
+      buttons.forEach(item=>item.disabled=true);
+      if(button){button.textContent=pending?'确认领取中…':'正在抢券…';button.setAttribute('aria-busy','true');}
+      couponNotice(view,couponId,pending?'正在确认上次的领取结果，请稍候…':'正在为你抢券，请稍候…','pending');
+      try{
+        if(!pending){
+          const result=await api(`/coupons/${couponId}/claim`,{method:'POST',body:{}});
+          pending={orderId:result.orderId,couponId};
+          localStorage.setItem(key,JSON.stringify(pending));
+        }
+        await poll(pending.orderId,key,view,couponId);
+      }catch(error){
+        const reason=error.status===401?'登录已过期，请重新登录后再试':error instanceof TypeError?'网络连接不稳定，请检查网络后重试':error.message||'服务暂时繁忙，请稍后再试';
+        couponNotice(view,couponId,pending?`领取结果暂未确认：${reason}。申请已保留，可稍后刷新查看，请勿重复抢券。`:`领取未成功：${reason}。`,'error');
+      }finally{
+        busy=false;
+        buttons.forEach(item=>{if(item.isConnected)item.disabled=false;});
+        if(button?.isConnected){button.textContent='立即抢券';button.removeAttribute('aria-busy');}
+      }
+    }
+    buttons.forEach(button=>button.onclick=()=>need(()=>claim(button)));
     if(logged()){
-      const key='pet-pending-coupon:'+sessionStorage.getItem('pet-customer-phone'),id=localStorage.getItem(key);
-      if(id)await poll(id,key,0);
+      const saved=pendingCoupon('pet-pending-coupon:'+sessionStorage.getItem('pet-customer-phone'));
+      if(saved)await claim(buttons.find(button=>button.dataset.claim===String(saved.couponId)),saved);
     }
   }
-  async function poll(id,key,attempt){
-    if(location.hash!=='#coupons')return;
-    const result=await api('/coupon-orders/'+encodeURIComponent(id));
-    const box=document.getElementById('claim-status');if(!box)return;
-    box.className='notice';
-    if(result.state==='PENDING'){
-      box.textContent='抢券请求已受理，优惠券正在生成。你可以离开页面，稍后回来查看。';
-      if(attempt<20)setTimeout(()=>poll(id,key,attempt+1).catch(error=>toast(error.message)),1000);
-    }else{
-      localStorage.removeItem(key);box.textContent=result.state==='FAILED'?(result.reason||'这次未能领到优惠券'):result.state==='USED'?'这张券已用于预约。':'领取成功，刷新后可在“我的优惠券”查看。';
+  const currentCouponView=view=>view===couponView&&location.hash==='#coupons';
+  function pendingCoupon(key){
+    const value=localStorage.getItem(key);
+    if(!value)return null;
+    // Earlier versions stored only the order ID; preserve it as a string.
+    if(!value.startsWith('{'))return {orderId:value};
+    try{return JSON.parse(value);}catch{localStorage.removeItem(key);return null;}
+  }
+  function wallet(coupons){
+    if(!logged())return '<button class="btn outline" id="coupon-login">登录后查看</button>';
+    return coupons.length?coupons.map(c=>`<div class="wallet-row"><div><strong>${e(c.title)}</strong><p class="muted">满 ¥${money(c.minSpendCents)} 减 ¥${money(c.discountCents)} · ${c.status==='USED'?'已用于预约':c.status==='FAILED'?'领取失败':new Date(c.validUntil+'+08:00')<new Date()?'已过期':'待使用'}</p></div>${c.status==='SUCCESS'?'<a class="btn small outline" href="#services">去预约</a>':''}</div>`).join(''):'<p class="muted">还没有优惠券，挑一张喜欢的领取吧。</p>';
+  }
+  function couponNotice(view,couponId,message,kind,notify=true){
+    if(!currentCouponView(view))return;
+    const box=document.getElementById('claim-status');
+    if(box){box.hidden=false;box.className='notice coupon-feedback-'+kind;box.textContent=message;}
+    const card=[...document.querySelectorAll('[data-claim-feedback]')].find(item=>item.dataset.claimFeedback===String(couponId));
+    if(card){card.hidden=false;card.className='coupon-feedback coupon-feedback-'+kind;card.textContent=message;}
+    if(notify)toast(message);
+  }
+  async function poll(id,key,view,couponId){
+    for(let attempt=0;attempt<=20;attempt++){
+      if(!currentCouponView(view))return;
+      const result=await api('/coupon-orders/'+encodeURIComponent(id));
+      if(!currentCouponView(view))return;
+      if(result.state==='PENDING'){
+        couponNotice(view,couponId,'抢券请求已受理，正在确认领取结果，请稍候…','pending',false);
+        if(attempt<20){await new Promise(resolve=>setTimeout(resolve,1000));continue;}
+      }else if(['SUCCESS','USED','FAILED'].includes(result.state)){
+        localStorage.removeItem(key);
+        const failed=result.state==='FAILED';
+        couponNotice(view,couponId,failed?`这次没抢到：${result.reason||'优惠券已领完'}。看看其他好券吧。`:result.state==='USED'?'这张优惠券已用于预约，可在“我的预约”查看。':'领取成功！优惠券已放入“我的优惠券”，预约洗护时就能使用。',failed?'error':'success');
+        if(!failed){
+          try{
+            const coupons=await api('/my-coupons');
+            if(currentCouponView(view))document.getElementById('coupon-wallet').innerHTML=wallet(coupons);
+          }catch{
+            couponNotice(view,couponId,'领取成功！券包暂未刷新，请稍后点击“我的优惠券”旁的刷新查看。','success');
+          }
+        }
+        return;
+      }
+      couponNotice(view,couponId,'领取结果仍在确认中，申请已保留。请稍后刷新“我的优惠券”查看，无需重复抢券。','pending');
+      return;
     }
   }
   async function compose(){
@@ -110,5 +167,5 @@ window.PetLife=(()=>{
     const usable=coupons.filter(c=>c.status==='SUCCESS'&&Number(c.minSpendCents)<=price&&new Date(c.validUntil+'+08:00')>new Date());
     holder.innerHTML=`<label class="field"><span>预约优惠券</span><select name="couponOrderId"><option value="">不使用优惠券</option>${usable.map(c=>`<option value="${e(c.id)}" ${String(c.id)===String(draft.couponOrderId)?'selected':''}>${e(c.title)} · 减 ¥${money(Math.min(price,c.discountCents))}</option>`).join('')}</select></label><p class="muted small-text">下单时锁定优惠券；预约取消后退回，有效期保持原样。</p>`;
   }
-  return {ready,get enabled(){return enabled;},bookingCoupon,async render(route,options){context=options;if(!enabled)return false;if(route==='nearby')await nearby();else if(route==='coupons')await coupons();else if(['community','feed','hot'].includes(route))await community(route);else return false;return true;}};
+  return {ready,get enabled(){return enabled;},bookingCoupon,async render(route,options){context=options;if(route!=='coupons')couponView++;if(!enabled)return false;if(route==='nearby')await nearby();else if(route==='coupons')await coupons();else if(['community','feed','hot'].includes(route))await community(route);else return false;return true;}};
 })();
