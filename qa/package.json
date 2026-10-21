@@ -2,6 +2,6 @@
   "name": "petcare-browser-qa",
   "private": true,
   "version": "1.0.0",
-  "scripts": { "test": "node browser-smoke.cjs" },
+  "scripts": { "test": "node browser-smoke.cjs", "test:platform": "node browser-platform.cjs" },
   "devDependencies": { "playwright": "1.64.0" }
 }

@@ -337,3 +337,35 @@ dialog{padding:26px 20px;border-radius:18px}
 .owner-login-form{padding:60px 0;margin:auto}
 .owner-header{margin-bottom:22px}
 }
+
+[hidden]{display:none!important}
+.life-shortcuts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:30px 0 45px}
+.life-shortcuts a{padding:22px;background:var(--mint);border-radius:18px;font-size:18px;font-weight:700}
+.life-shortcuts span{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:6px}
+.life-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-bottom:28px}
+.life-page{max-width:1040px;min-height:65vh}
+.life-page h2{font-size:22px;margin:12px 0}
+.small-text{font-size:12px}
+.coupon-value{font-size:42px;color:var(--green);font-weight:700;margin:16px 0}
+.coupon-value small{font-size:13px;font-weight:400}
+.coupon-card{border-top:5px solid var(--green)}
+.wallet-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 0;border-bottom:1px solid var(--line)}
+.wallet-row p{margin:5px 0}
+.community-toolbar{display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap;margin:20px 0}
+.community-toolbar>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.post-card h2{margin:12px 0;font-size:23px}
+.post-content{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9}
+.post-author{font-weight:700;color:var(--green)}
+.post-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:20px;gap:10px;flex-wrap:wrap}
+.post-bottom>div{display:flex;gap:16px}.liked{color:#bb574d!important}
+.booking-coupon{margin:18px 0}.place-card p{overflow-wrap:anywhere}
+@media(min-width:761px) and (max-width:1100px){.site-header nav{gap:14px;font-size:12px}}
+@media(max-width:760px){
+  .life-shortcuts{grid-template-columns:1fr;gap:10px;margin:22px 0}
+  .life-shortcuts a{padding:15px;font-size:16px}
+  .life-shortcuts span{display:inline;font-size:11px;margin-left:8px}
+  .life-grid{grid-template-columns:1fr;gap:15px}
+  .life-page h2{font-size:20px}.coupon-value{font-size:36px}
+  .mobile-nav{gap:0;justify-content:space-around}.mobile-nav a,.mobile-nav button{min-width:0;flex:1;font-size:20px}
+  .mobile-nav span{font-size:10px}.community-toolbar .chip{padding:8px 13px}
+}

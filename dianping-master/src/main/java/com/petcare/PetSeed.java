@@ -10,6 +10,7 @@ import java.time.*;
 import java.util.*;
 
 @Component
+@org.springframework.core.annotation.Order(0)
 public class PetSeed implements ApplicationRunner {
     private final PetData db; private final Clock clock; private final boolean demo;
     public PetSeed(PetData db,Clock clock,@Value("${pet.seed-demo:true}") boolean demo) { this.db=db; this.clock=clock; this.demo=demo; }

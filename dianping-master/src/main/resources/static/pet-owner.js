@@ -6,11 +6,11 @@
   const tabs={dashboard:'门店概览',orders:'预约订单',shifts:'人员排班',services:'服务价目',staff:'美容师',store:'门店设置'};
   const refresh=()=>render();
   function login() {
-    app.innerHTML=`<div class="owner-login"><div class="owner-login-art"><div class="eyebrow">PETCARE STUDIO</div><h1>照顾好毛孩子，<br>也照顾好<br>每一份预约。</h1><p>从一张日程表，开始有条不紊的一天。</p></div><form class="owner-login-form" id="owner-login"><a class="brand" href="/">✦ 宠伴洗护</a><h2>欢迎回到门店</h2><p class="muted">登录店主工作台，管理今日预约。</p>${input('店主账号','username','petadmin','text','required autocomplete="username"')}${input('密码','password','','password','required autocomplete="current-password"')}<button class="btn full">登录工作台 →</button><div class="notice">本机演示账号：petadmin<br>默认密码：PetDemo2026!<br>配置自定义账号后，请使用你设置的账号密码。</div><a class="text-button" href="/">← 返回顾客网页</a></form></div>`;
+    app.innerHTML=`<div class="owner-login"><div class="owner-login-art"><div class="eyebrow">PETCARE STUDIO</div><h1>照顾好毛孩子，<br>也照顾好<br>每一份预约。</h1><p>从一张日程表，开始有条不紊的一天。</p></div><form class="owner-login-form" id="owner-login"><a class="brand" href="/">✦ 宠伴生活</a><h2>欢迎回到门店</h2><p class="muted">登录店主工作台，管理今日预约。</p>${input('店主账号','username','petadmin','text','required autocomplete="username"')}${input('密码','password','','password','required autocomplete="current-password"')}<button class="btn full">登录工作台 →</button><div class="notice">本机演示账号：petadmin<br>默认密码：PetDemo2026!<br>配置自定义账号后，请使用你设置的账号密码。</div><a class="text-button" href="/">← 返回顾客网页</a></form></div>`;
     document.getElementById('owner-login').onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{const session=await api('/auth/owner',{method:'POST',body:formData(event.target)});sessionStorage.setItem('pet-owner-token',session.token);render();});};
   }
   function shell() {
-    app.innerHTML=`<div class="owner-shell"><aside class="owner-sidebar"><a class="brand" href="/owner.html">✦ 宠伴洗护</a><p class="owner-caption">STORE WORKSPACE</p><nav class="owner-navigation">${Object.entries(tabs).map(([key,title])=>`<a href="#${key}" class="${key===state.tab?'active':''}">${title}</a>`).join('')}</nav><div class="owner-sidebar-bottom"><span>单店管理 · 店主账号</span><a href="/" target="_blank" rel="noopener">查看顾客网页 ↗</a><button class="text-button" id="owner-logout">退出登录</button></div></aside><main class="owner-main"><header class="owner-header"><div><h1>${tabs[state.tab]}</h1><p>${e(state.store.name)} · ${date(0)}</p></div><span class="owner-status">门店工作台</span></header><div id="owner-content"></div></main></div>`;
+    app.innerHTML=`<div class="owner-shell"><aside class="owner-sidebar"><a class="brand" href="/owner.html">✦ 宠伴生活</a><p class="owner-caption">STORE WORKSPACE</p><nav class="owner-navigation">${Object.entries(tabs).map(([key,title])=>`<a href="#${key}" class="${key===state.tab?'active':''}">${title}</a>`).join('')}</nav><div class="owner-sidebar-bottom"><span>单店管理 · 店主账号</span><a href="/" target="_blank" rel="noopener">查看顾客网页 ↗</a><button class="text-button" id="owner-logout">退出登录</button></div></aside><main class="owner-main"><header class="owner-header"><div><h1>${tabs[state.tab]}</h1><p>${e(state.store.name)} · ${date(0)}</p></div><span class="owner-status">门店工作台</span></header><div id="owner-content"></div></main></div>`;
     document.getElementById('owner-logout').onclick=()=>submit(document.getElementById('owner-logout'),async()=>{await api('/auth/logout',{method:'POST'});sessionStorage.removeItem('pet-owner-token');login();});
   }
   function orderTable(orders, compact=false) {
@@ -75,9 +75,10 @@
   async function render() {
     if(!sessionStorage.getItem('pet-owner-token'))return login();
     try {
+      if((await api('/capabilities')).platform)tabs.coupons='优惠券活动';
       const tab=location.hash.slice(1)||'dashboard';state.tab=tabs[tab]?tab:'dashboard';
       [state.store,state.orders,state.specs,state.staff,state.shifts]=await Promise.all([api('/store'),api('/owner/orders'),api('/owner/services'),api('/owner/staff'),api('/owner/shifts')]);
-      shell();const el=document.getElementById('owner-content');if(state.tab==='dashboard')await dashboard(el);else ({orders,services,staff,shifts,store})[state.tab](el);
+      shell();const el=document.getElementById('owner-content');if(state.tab==='dashboard')await dashboard(el);else if(state.tab==='coupons')await renderPetCoupons(el,render);else await ({orders,services,staff,shifts,store})[state.tab](el);
     } catch(error) {if(error.status===401||error.status===403){sessionStorage.removeItem('pet-owner-token');login();toast(error.message);}else {toast(error.message);app.innerHTML=`<div class="container"><div class="error-box">${e(error.message)}</div><button class="btn" id="retry-owner">重试</button></div>`;document.getElementById('retry-owner').onclick=render;}}
   }
   addEventListener('hashchange',()=>{close();render();});

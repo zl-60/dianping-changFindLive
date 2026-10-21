@@ -1,0 +1,51 @@
+name: pet-companion-life
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: petcare
+      MYSQL_USER: petcare
+      MYSQL_PASSWORD: ${PET_DB_PASSWORD:?Set PET_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${PET_MYSQL_ROOT_PASSWORD:?Set PET_MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:${PET_MYSQL_PORT:-13306}:3306"
+    volumes:
+      - pet_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:${PET_REDIS_PORT:-6379}:6379"
+    volumes:
+      - pet_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${PET_RABBIT_USERNAME:-petcare}
+      RABBITMQ_DEFAULT_PASS: ${PET_RABBIT_PASSWORD:?Set PET_RABBIT_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${PET_RABBIT_VHOST:-/petcare}
+    ports:
+      - "127.0.0.1:${PET_RABBIT_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - pet_rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+volumes:
+  pet_mysql:
+  pet_redis:
+  pet_rabbit:

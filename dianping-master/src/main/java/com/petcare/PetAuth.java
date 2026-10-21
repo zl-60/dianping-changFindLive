@@ -18,6 +18,7 @@ import static com.petcare.PetData.*;
 public class PetAuth {
     private final PetData db;
     private final Clock clock;
+    private final PetSessions sessions;
     private final boolean demo;
     private final String owner;
     private final byte[] ownerHash;
@@ -25,10 +26,10 @@ public class PetAuth {
     private final SecureRandom random = new SecureRandom();
     private final ConcurrentHashMap<String, List<Instant>> ownerAttempts = new ConcurrentHashMap<>();
 
-    public PetAuth(PetData db, Clock clock, @Value("${pet.demo-auth:false}") boolean demo,
+    public PetAuth(PetData db, Clock clock, PetSessions sessions, @Value("${pet.demo-auth:false}") boolean demo,
                    @Value("${pet.admin-username:petadmin}") String owner,
                    @Value("${pet.admin-password}") String password) {
-        this.db=db; this.clock=clock; this.demo=demo; this.owner=owner;
+        this.db=db; this.clock=clock; this.sessions=sessions; this.demo=demo; this.owner=owner;
         if (password.length()<8) throw new IllegalArgumentException("店主密码至少八位");
         random.nextBytes(salt); this.ownerHash=hashPassword(password);
     }
@@ -78,6 +79,8 @@ public class PetAuth {
             throw new PetException("验证码错误");
         }
         db.update("DELETE FROM pet_login_code WHERE phone=?",phone);
+        if(db.count("SELECT COUNT(*) FROM pet_member WHERE phone=?",phone)==0)
+            db.update("INSERT INTO pet_member(phone,nickname,created_at) VALUES(?,?,?)",phone,"宠友"+phone.substring(7),Timestamp.valueOf(now()));
         return session(phone,"CUSTOMER");
     }
     public Map<String,Object> ownerLogin(String username,String password,String ip) {
@@ -94,20 +97,22 @@ public class PetAuth {
     }
     private Map<String,Object> session(String subject,String role) {
         String token=UUID.randomUUID().toString().replace("-","")+UUID.randomUUID().toString().replace("-","");
-        db.update("INSERT INTO pet_session(token,subject,role,expires_at) VALUES(?,?,?,?)",token,subject,role,Timestamp.valueOf(now().plusHours(12)));
-        return map("token",token,"subject",subject,"role",role,"expiresIn",43200);
+        sessions.save(token,map("subject",subject,"role",role));
+        return map("token",token,"subject",subject,"role",role,"expiresIn",1800);
     }
-    public Map<String,Object> require(HttpServletRequest request,String role) {
+    public Map<String,Object> resolve(HttpServletRequest request) {
         String header=request.getHeader("Authorization");
-        if(header==null || !header.startsWith("Bearer ")) throw new PetException(401,"请先登录");
-        List<Map<String,Object>> rows=db.rows("SELECT subject,role FROM pet_session WHERE token=? AND expires_at>?",
-            header.substring(7),Timestamp.valueOf(now()));
-        if(rows.isEmpty()) throw new PetException(401,"登录已过期，请重新登录");
-        Map<String,Object> user=rows.get(0);
+        return header!=null && header.startsWith("Bearer ") ? sessions.load(header.substring(7)) : null;
+    }
+    @SuppressWarnings("unchecked")
+    public Map<String,Object> require(HttpServletRequest request,String role) {
+        Map<String,Object> user=(Map<String,Object>)request.getAttribute(PetUserContext.ATTRIBUTE);
+        if(user==null) user=resolve(request);
+        if(user==null) throw new PetException(401,"登录已过期，请重新登录");
         if(role!=null && !role.equals(user.get("role"))) throw new PetException(403,"没有此操作的权限");
         return user;
     }
     public void logout(HttpServletRequest request) {
-        require(request,null); db.update("DELETE FROM pet_session WHERE token=?",request.getHeader("Authorization").substring(7));
+        require(request,null); sessions.delete(request.getHeader("Authorization").substring(7));
     }
 }

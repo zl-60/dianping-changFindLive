@@ -20,6 +20,29 @@ import java.util.function.Function;
 public class CacheClient {
     private final StringRedisTemplate stringRedisTemplate;
 
+    /** Cold-key protection shared by the pet catalog. Lock ownership is checked by Lua. */
+    public <R,ID> R queryWithMutex(String prefix,ID id,Class<R> type,Function<ID,R> fallback,Long ttl,TimeUnit unit) {
+        String key=prefix+id;
+        SimpleRedisLock lock=new SimpleRedisLock(":pet:cache:"+key,stringRedisTemplate);
+        for(int attempt=0;attempt<100;attempt++) {
+            String cached=stringRedisTemplate.opsForValue().get(key);
+            if(cached!=null) return cached.isEmpty()?null:JSONUtil.toBean(cached,type);
+            if(lock.tryLock(10)) {
+                try {
+                    cached=stringRedisTemplate.opsForValue().get(key);
+                    if(cached!=null) return cached.isEmpty()?null:JSONUtil.toBean(cached,type);
+                    R value=fallback.apply(id);
+                    if(value==null) stringRedisTemplate.opsForValue().set(key,"",2,TimeUnit.MINUTES);
+                    else set(key,value,ttl,unit);
+                    return value;
+                } finally { lock.delLock(); }
+            }
+            try { Thread.sleep(20); }
+            catch(InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException("缓存查询被中断",error); }
+        }
+        throw new IllegalStateException("缓存重建繁忙，请稍后重试");
+    }
+
 
     public CacheClient(StringRedisTemplate stringRedisTemplate) {
         this.stringRedisTemplate = stringRedisTemplate;

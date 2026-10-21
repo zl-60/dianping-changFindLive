@@ -10,12 +10,25 @@ import static com.petcare.PetData.*;
 public class PetController {
     private final PetAuth auth;
     private final PetBookingService booking;
-    public PetController(PetAuth auth,PetBookingService booking) { this.auth=auth; this.booking=booking; }
+    private final org.springframework.beans.factory.ObjectProvider<com.petcare.platform.PetCatalog> catalog;
+    private final org.springframework.core.env.Environment environment;
+    public PetController(PetAuth auth,PetBookingService booking,org.springframework.beans.factory.ObjectProvider<com.petcare.platform.PetCatalog> catalog,org.springframework.core.env.Environment environment) {
+        this.auth=auth; this.booking=booking; this.catalog=catalog; this.environment=environment;
+    }
     private Map<String,Object> ok(Object data) { return map("success",true,"data",data); }
     private String customer(HttpServletRequest request) { return (String)auth.require(request,"CUSTOMER").get("subject"); }
     private void owner(HttpServletRequest request) { auth.require(request,"OWNER"); }
-    @GetMapping("/store") public Object store() { return ok(booking.store()); }
-    @GetMapping("/services") public Object services() { return ok(booking.specs(false)); }
+    @GetMapping("/capabilities") public Object capabilities() { return ok(map("platform",environment.acceptsProfiles(org.springframework.core.env.Profiles.of("platform")),"name","宠伴生活 · 宠物服务与交流平台")); }
+    @GetMapping("/store") public Object store() {
+        com.petcare.platform.PetCatalog value=catalog.getIfAvailable();
+        return ok(value==null?booking.store():value.place(1));
+    }
+    @GetMapping("/services") public Object services() {
+        com.petcare.platform.PetCatalog value=catalog.getIfAvailable();
+        List<Map<String,Object>> specs=booking.specs(false);
+        if(value!=null) specs.replaceAll(spec->value.spec(((Number)spec.get("id")).longValue()));
+        return ok(specs);
+    }
     @GetMapping("/availability") public Object availability(@RequestParam long specId,@RequestParam String date) { return ok(booking.availability(specId,date)); }
     @GetMapping("/reviews") public Object reviews() { return ok(booking.reviews()); }
     @PostMapping("/auth/code") public Object code(@RequestBody Map<String,Object> input) { return ok(auth.code(PetAuth.phone(input.get("phone")))); }

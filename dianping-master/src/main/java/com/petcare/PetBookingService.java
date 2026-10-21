@@ -14,7 +14,11 @@ import static com.petcare.PetData.*;
 public class PetBookingService {
     private final PetData db;
     private final Clock clock;
-    public PetBookingService(PetData db,Clock clock) { this.db=db; this.clock=clock; }
+    private final PetCouponUse coupons;
+    private final org.springframework.context.ApplicationEventPublisher events;
+    public PetBookingService(PetData db,Clock clock,PetCouponUse coupons,org.springframework.context.ApplicationEventPublisher events) {
+        this.db=db; this.clock=clock; this.coupons=coupons; this.events=events;
+    }
     private LocalDateTime now() { return LocalDateTime.now(clock); }
     private int n(Map<String,Object> row,String key) { return ((Number)row.get(key)).intValue(); }
     private LocalDateTime time(Map<String,Object> row,String key) { return LocalDateTime.parse((String)row.get(key)); }
@@ -83,6 +87,7 @@ public class PetBookingService {
                 !breed.equals(previous.get("breed")) || weight.compareTo((BigDecimal)previous.get("weight"))!=0 ||
                 !notes.equals(previous.get("notes")) || !contact.equals(previous.get("contactName")) || !phone.equals(previous.get("contactPhone")))
                 throw new PetException(409,"重复请求的内容已改变，请返回重新预约");
+            coupons.sameRequest((String)previous.get("id"),input);
             return decorate(previous);
         }
         Map<String,Object> spec=spec(specId); int hours=n(spec,"durationHours");
@@ -92,12 +97,14 @@ public class PetBookingService {
         List<Map<String,Object>> candidates=availableStaff(spec,start,null);
         if(candidates.isEmpty()) throw new PetException(409,"这个时间已经约满，请返回选择其他时间");
         Map<String,Object> assigned=candidates.get(0);
+        Map<String,Object> coupon=coupons.check(user,input,n(spec,"priceCents"));
         String id=UUID.randomUUID().toString().replace("-","");
         String code=UUID.randomUUID().toString().replace("-","").substring(0,10).toUpperCase(Locale.ROOT);
         db.update("INSERT INTO pet_order(id,user_phone,request_key,spec_id,service_title,size_label,species,price_cents,duration_hours,pet_name,breed,weight,notes,contact_name,contact_phone,staff_id,staff_name,starts_at,ends_at,status,created_at,deadline,booking_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             id,user,requestKey,specId,spec.get("title"),spec.get("sizeLabel"),species,spec.get("priceCents"),hours,
             petName,breed,weight,notes,contact,phone,assigned.get("id"),assigned.get("name"),Timestamp.valueOf(start),
             Timestamp.valueOf(start.plusHours(hours)),"UNPAID",Timestamp.valueOf(now()),Timestamp.valueOf(now().plusMinutes(10)),code);
+        coupons.use(id,coupon,n(spec,"priceCents"));
         occupy(id,((Number)assigned.get("id")).longValue(),start,hours);
         return order(user,id,false);
     }
@@ -115,6 +122,8 @@ public class PetBookingService {
         return decorate(order);
     }
     private Map<String,Object> decorate(Map<String,Object> order) {
+        List<Map<String,Object>> discount=db.rows("SELECT coupon_order_id,discount_cents,original_cents FROM pet_coupon_history WHERE order_id=?",order.get("id"));
+        order.put("coupon",discount.isEmpty()?null:discount.get(0));
         List<Map<String,Object>> review=db.rows("SELECT stars,content,created_at FROM pet_review WHERE order_id=?",order.get("id"));
         order.put("review",review.isEmpty()?null:review.get(0));
         order.put("serverNow",now().toString());
@@ -138,6 +147,7 @@ public class PetBookingService {
     private void cancelLocked(String id,String reason) {
         db.update("UPDATE pet_order SET status='CANCELLED',refunded=paid,deadline=NULL,cancel_reason=?,cancelled_at=? WHERE id=?",reason,Timestamp.valueOf(now()),id);
         db.update("DELETE FROM pet_slot WHERE order_id=?",id);
+        coupons.release(id);
     }
     public void expire() { db.lock(); expireLocked(); }
     private void expireLocked() {
@@ -223,6 +233,7 @@ public class PetBookingService {
             Map<String,Object> old=db.one("SELECT category FROM pet_spec WHERE id=?",id);
             if(!category.equals(old.get("category")) && db.count("SELECT COUNT(*) FROM pet_order WHERE spec_id=?",id)>0) throw new PetException("已有订单的规格不能更改服务类别，请新增规格");
             db.update("UPDATE pet_spec SET title=?,category=?,species=?,size_label=?,min_weight=?,max_weight=?,price_cents=?,duration_hours=?,description=?,active=? WHERE id=?",title,category,species,size,min,max,price,duration,description,active,id);
+            events.publishEvent(new PetCatalogChanged(id));
         }
     }
     public void saveStaff(Long id,Map<String,Object> input) {
@@ -255,6 +266,7 @@ public class PetBookingService {
                 if(time(order,"startsAt").getHour()<start || time(order,"endsAt").getHour()>end) throw new PetException("营业时间与已有预约冲突，请先处理订单");
         }
         db.update("UPDATE pet_store SET name=?,address=?,phone=?,description=?,open_hour=?,close_hour=? WHERE id=1",text(input,"name",80),text(input,"address",200),text(input,"phone",30),text(input,"description",500),start,end);
+        events.publishEvent(new PetCatalogChanged(null));
     }
     private BigDecimal decimal(Map<String,Object> input,String key) {
         try { BigDecimal value=new BigDecimal(String.valueOf(input.get(key))); if(value.scale()>2) throw new IllegalArgumentException(); return value; }

@@ -3,7 +3,7 @@ server:
   port: ${PET_PORT:8081}
 spring:
   profiles:
-    active: ${PET_PROFILE:demo}
+    active: ${PET_PROFILE:demo,platform}
   jackson:
     time-zone: Asia/Shanghai
   datasource:
@@ -18,6 +18,8 @@ pet:
 ---
 spring:
   profiles: demo
+  autoconfigure:
+    exclude: com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration,org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   datasource:
     driver-class-name: org.h2.Driver
     url: jdbc:h2:file:./.pet-data/petcare;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE
@@ -28,8 +30,43 @@ spring:
   profiles: mysql
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${PET_DB_URL:jdbc:mysql://127.0.0.1:3306/petcare?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
+    url: ${PET_DB_URL:jdbc:mysql://127.0.0.1:3306/petcare?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
     username: ${PET_DB_USERNAME:root}
     password: ${PET_DB_PASSWORD}
 pet:
   admin-password: ${PET_ADMIN_PASSWORD}
+---
+spring:
+  profiles: platform
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  redis:
+    host: ${PET_REDIS_HOST:127.0.0.1}
+    port: ${PET_REDIS_PORT:6379}
+    password: ${PET_REDIS_PASSWORD:}
+    database: ${PET_REDIS_DATABASE:6}
+    timeout: 3s
+  rabbitmq:
+    host: ${PET_RABBIT_HOST:127.0.0.1}
+    port: ${PET_RABBIT_PORT:5672}
+    username: ${PET_RABBIT_USERNAME:guest}
+    password: ${PET_RABBIT_PASSWORD:guest}
+    virtual-host: ${PET_RABBIT_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        default-requeue-rejected: false
+        prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1s
+          max-attempts: 3
+          multiplier: 2
+mybatis-plus:
+  mapper-locations: classpath*:pet-mappers/*.xml
+pet:
+  platform-enabled: true
+  relay-enabled: true

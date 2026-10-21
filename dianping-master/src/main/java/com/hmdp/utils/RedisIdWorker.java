@@ -20,13 +20,15 @@ public class RedisIdWorker {
     private StringRedisTemplate stringRedisTemplate;
     public Long nextId(String keyPrefix){
         //1.生成时间戳
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         long nowSecond = now.toEpochSecond(ZoneOffset.UTC);
         long timestamp = nowSecond - BEGIN_TIMESTAMP;
         //2.生成序列号
         //2.1.获取当前日期，精确到天
         String date = now.format(DateTimeFormatter.ofPattern("yyyy:MM:dd"));
         Long count = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + date);
+        if(count==null || count>0xffffffffL || timestamp<0 || timestamp>0x7fffffffL)
+            throw new IllegalStateException("分布式 ID 时间或序列超出范围");
 
 
         //3.拼接并返回

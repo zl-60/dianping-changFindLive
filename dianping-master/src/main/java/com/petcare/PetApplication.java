@@ -10,12 +10,7 @@ import java.util.Collections;
 
 /** Isolated entry point: the original Dianping application and tables remain available. */
 @EnableScheduling
-@SpringBootApplication(proxyBeanMethods = false, excludeName = {
-    "com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration",
-    "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration",
-    "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
-    "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
-})
+@SpringBootApplication(proxyBeanMethods = false)
 public class PetApplication {
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(PetApplication.class);
