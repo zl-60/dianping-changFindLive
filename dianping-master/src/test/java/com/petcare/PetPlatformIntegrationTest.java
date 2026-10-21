@@ -102,6 +102,26 @@ class PetPlatformIntegrationTest {
         assertEquals(1,db.count("SELECT COUNT(*) FROM pet_coupon_order"));assertEquals(id,claim(coupon,1));
         assertThrows(PetException.class,()->{member(2);coupons.result(id,phone(2));});
     }
+    @Test void duplicateClaimFeedbackDistinguishesPendingReceivedAndUsedCoupons() {
+        long coupon=coupon(1);String id=claim(coupon,1);
+        Map<String,Object> pending=coupons.claim(coupon,phone(1));
+        assertEquals(id,pending.get("orderId"));assertEquals("PENDING",pending.get("state"));
+        assertEquals(false,pending.get("alreadyClaimed"));
+        consumer.consume(id);
+        Map<String,Object> received=coupons.claim(coupon,phone(1));
+        assertEquals(id,received.get("orderId"));assertEquals("SUCCESS",received.get("state"));
+        assertEquals(true,received.get("alreadyClaimed"));
+        assertEquals("你已经领取过该优惠券，每人限领一次。可在“我的优惠券”查看。",received.get("message"));
+        booking.create(phone(1),bookingInput(id));
+        Map<String,Object> used=coupons.claim(coupon,phone(1));
+        assertEquals("USED",used.get("state"));assertEquals(true,used.get("alreadyClaimed"));
+        assertEquals("0",redis.opsForValue().get(PetKeys.coupon(coupon,"stock")));
+        assertEquals(0,db.count("SELECT stock FROM pet_coupon WHERE id=?",coupon));
+        assertEquals(1,db.count("SELECT COUNT(*) FROM pet_coupon_order WHERE coupon_id=?",coupon));
+        long different=coupon(1);String differentId=claim(different,1);
+        assertNotEquals(id,differentId);consumer.consume(differentId);
+        assertEquals("SUCCESS",coupons.result(differentId,phone(1)).get("state"));
+    }
     @Test void databaseRejectionCompensatesOnlyOnce() {
         long coupon=coupon(2);db.update("UPDATE pet_coupon SET stock=0 WHERE id=?",coupon);
         String id=claim(coupon,1);consumer.consume(id);consumer.consume(id);

@@ -68,7 +68,12 @@ public class PetCouponService {
         if(result==null) throw new PetException(503,"抢券服务暂时不可用");
         if(result==2) {
             Object existing=redis.opsForHash().get(PetKeys.coupon(couponId,"buyers"),String.valueOf(user));
-            return result(String.valueOf(existing),phone);
+            Map<String,Object> previous=result(String.valueOf(existing),phone);
+            boolean received="SUCCESS".equals(previous.get("state"))||"USED".equals(previous.get("state"));
+            previous.put("alreadyClaimed",received);
+            if(received) previous.put("message","你已经领取过该优惠券，每人限领一次。可在“我的优惠券”查看。");
+            else if("PENDING".equals(previous.get("state"))) previous.put("message","该优惠券正在领取中，请稍候查看结果");
+            return previous;
         }
         if(result==1) throw new PetException(409,"优惠券已抢完");
         if(result==3) throw new PetException(503,"活动库存尚未就绪，请店主重新发布活动");

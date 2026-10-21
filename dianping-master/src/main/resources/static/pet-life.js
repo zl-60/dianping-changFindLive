@@ -66,6 +66,10 @@ window.PetLife=(()=>{
       try{
         if(!pending){
           const result=await api(`/coupons/${couponId}/claim`,{method:'POST',body:{}});
+          if(result.alreadyClaimed===true){
+            couponNotice(view,couponId,result.message||'你已经领取过该优惠券，每人限领一次。可在“我的优惠券”查看。','error');
+            return;
+          }
           pending={orderId:result.orderId,couponId};
           localStorage.setItem(key,JSON.stringify(pending));
         }
