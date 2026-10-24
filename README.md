@@ -1,4 +1,4 @@
-# 宠伴生活 · 宠物服务与交流平台
+# 宠伴生活 · 宠物服务平台
 
 基于原黑马点评 Java / Spring Boot 工程完成两轮改造。保留 Spring Boot、MyBatis-Plus、Redis、Lua、RabbitMQ、Redisson、MySQL 技术栈，接入宠物门店发现、限量洗护券、宠友社区、签到，以及顾客网页和店主工作台。
 
